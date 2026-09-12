@@ -1,130 +1,75 @@
-## Dementia Risk Prediction using Machine Learning
+# Dementia Risk Prediction using Machine Learning
 
 ## Overview
 
-The proposed architecture is a **non-invasive, machine learning–based dementia risk prediction framework** designed to analyze the **combined influence of sociodemographic, lifestyle, cognitive, genetic, and health-related factors**. The model leverages a **Random Forest classifier** supported by a rigorous **feature selection, preprocessing, and optimization pipeline**, ensuring high predictive performance, robustness, and interpretability.
+The proposed architecture is a **non-invasive, machine learning-based dementia risk prediction framework** designed to analyze the **combined influence of sociodemographic, lifestyle, cognitive, genetic, and health-related factors**. The model leverages a **Random Forest classifier** supported by a rigorous **feature selection, preprocessing, and optimization pipeline**, ensuring high predictive performance, robustness, and interpretability.
 
 This architecture is specifically tailored for **early-stage dementia detection** using structured clinical data, eliminating reliance on **expensive or invasive diagnostic procedures** such as MRI, PET scans, or cerebrospinal fluid analysis.
 
 ## High-Level Architecture Flow
 
-**Raw NACC Dataset → Data Cleaning & Imputation → Feature Selection → Class Balancing → Model Training & Optimization → Dementia Risk Prediction**
+**Raw NACC Dataset -> Target Leakage Removal & Splitting -> Imputation & Scaling -> Feature Selection -> Pipeline-Integrated SMOTE & Model Optimization -> Dementia Risk Prediction**
 
 Each stage is carefully designed to address real-world clinical data challenges such as **missing values, multicollinearity, class imbalance, and feature redundancy**.
 
 ## Dataset Input
 
-* **Source:** National Alzheimer’s Coordinating Center (**NACC UDS dataset**)
-* **Initial Dataset Size:** 198,627 records × 1,024 features
-* **Population:** Cognitively normal individuals, mild cognitive impairment (MCI), and dementia cases
-* **Feature Categories:**
+* **Source:** National Alzheimer's Coordinating Center (NACC UDS dataset)
+* **Population:** Cognitively normal individuals, mild cognitive impairment (MCI), and dementia cases. Records with age < 60 years (NACCAGE) are filtered out.
+* **Feature Categories:** Sociodemographic, Lifestyle, Health, and Genetic factors (APOE4).
 
-  * **Sociodemographic**
-  * **Lifestyle**
-  * **Health**
-  * **Cognitive assessments (MMSE, MoCA)**
-  * **Genetic factors (APOE4 allele presence)**
+## Critical Architectural Update: Leakage Prevention
+
+To ensure the model generalizes to real-world clinical scenarios and does not "cheat" by using downstream consequences of a dementia diagnosis, strict leakage prevention steps were integrated:
+
+* **Target Leakage Exclusion:** Direct clinical determinants and downstream indicators (e.g., NACCMOCA, INDEPEND, NACCLIVS, RESIDENC) were explicitly removed.
+* **Patient-Aware Splitting:** Utilizing StratifiedGroupKFold across Train/Validation/Test splits ensures that no single patient's data appears in more than one partition.
 
 ## Data Preprocessing Layer
 
-### 🔹 Data Cleaning
+### Data Cleaning & Imputation
 
-* Removed features with **>50% missing values**
-* Excluded records with **age < 60 years (NACCAGE)**
+* Removed features with >50% missing values (threshold derived solely from the training set).
+* Applied Iterative Imputation (equivalent to Multiple Imputation by Chained Equations - MICE) to preserve complex variable relationships. Imputers are strictly fit on the training data.
+* Applied standard scaling to normalize feature distributions.
 
-### 🔹 Missing Value Imputation
+### Variance & Collinearity Filtering
 
-* Applied **Multiple Imputation by Chained Equations (MICE)**
-* Effectively preserves **complex variable relationships** and reduces bias compared to simple imputation
+* Eliminated low-variance features using Variance Thresholding.
+* Computed Pearson and Spearman correlation matrices; highly correlated features (>0.85) were removed to reduce multicollinearity.
 
-### 🔹 Variance Filtering
-
-* Eliminated **low-variance features** using Variance Thresholding
-* Reduced feature count to **64 informative features**
-
-## Feature Selection & Engineering
-
-### 🔹 Importance-Based Feature Ranking
+## Feature Selection
 
 A combination of complementary feature selection techniques was employed:
 
 * **Random Forest Feature Importance**
 * **Recursive Feature Elimination (RFE)**
 
-Feature rankings were cross-validated against **existing dementia literature** to ensure **clinical relevance**.
-
-### 🔹 Multicollinearity Reduction
-
-* Computed **Pearson and Spearman correlation matrices**
-* Highly correlated features were removed to reduce **multicollinearity**
-
-### 🔹 Final Feature Set
-
-* **Final number of selected features:** **21**
-* Represents the most predictive and clinically meaningful dementia risk factors
+Feature rankings emphasize the most predictive and clinically meaningful dementia risk factors while explicitly excluding previously identified leaky variables like Level of Independence (INDEPEND).
 
 ## Class Balancing Strategy
 
-* Original training data exhibited **significant class imbalance**
-* Applied **SMOTE (Synthetic Minority Oversampling Technique)** on the training set
-
-**Post-SMOTE Class Distribution:**
-
-* Non-Demented (0): 91,321
-* Demented (1): 91,321
-
-This step ensures **balanced learning** and prevents model bias toward the majority class.
+* Original training data exhibited significant class imbalance.
+* Applied **SMOTE (Synthetic Minority Oversampling Technique)**.
+* **Crucial Update:** SMOTE is now applied dynamically inside a cross-validation pipeline (ImbPipeline) rather than globally on the entire training set. This prevents synthetic data bleed and ensures rigorous, unbiased validation.
 
 ## Model Core: Random Forest Classifier
 
-### 🌲 Architecture Choice
+### Architecture Choice
 
-The **Random Forest** model was selected due to its:
+The Random Forest model was selected due to its ability to handle mixed data types, its robustness to outliers, and its built-in feature importance estimation.
 
-* Ability to handle **mixed data types**
-* Robustness to **outliers and noisy clinical data**
-* Built-in **feature importance estimation**
-* Scalability to **large, high-dimensional datasets**
+### Hyperparameter Optimization
 
-### 🔹 Training Strategy
-
-* Trained using **k-fold cross-validation** on the training set
-* Ensures model generalization and stability
-
-### 🔹 Hyperparameter Optimization
-
-* Employed **Randomized Search Cross-Validation (RandomizedSearchCV)**
-* Optimized key parameters such as:
-
-  * Number of trees
-  * Maximum tree depth
-  * Minimum samples per split
-
-## Model Output & Interpretability
-
-* **Binary classification output:**
-
-  * **0 → Non-Demented**
-  * **1 → Demented**
-
-* Feature importance analysis highlights **key contributing factors**, with **INDEPEND (Level of Independence)** emerging as the most influential feature
-
-This interpretability makes the model suitable for **clinical decision support** and **risk stratification**.
+* Employed **Randomized Search Cross-Validation (RandomizedSearchCV)**.
+* Optimized parameters across the pipeline (including trees, depth, and split requirements) using patient-grouped k-fold cross-validation.
 
 ## Performance Summary
 
-* **Accuracy:** **92.06%**
-* **ROC–AUC Score:** **96.55%**
+Previous iterations of the model reported an inflated ROC-AUC of 96.55%, which was primarily driven by target leakage (e.g., including independence level features).
 
-The high ROC–AUC demonstrates strong discriminatory power between demented and non-demented individuals.
+Following the strict removal of leaky features and implementing patient-grouped cross-validation, the model achieves a highly robust, clinically realistic performance metric:
 
-## Architectural Strengths
+* **Test ROC-AUC: 0.7461**
 
-* **Non-invasive and cost-effective** alternative to imaging-based diagnosis
-* **Highly interpretable** compared to black-box deep learning models
-* **Scalable** to large longitudinal healthcare datasets
-* Robust handling of **missing data, imbalance, and multicollinearity**
-
-## Summary
-
-The proposed architecture integrates **rigorous data preprocessing**, **clinically informed feature selection**, **class imbalance correction**, and a **Random Forest–based predictive core** to deliver a reliable and interpretable dementia risk prediction system. This design enables early detection, supports clinical workflows, and provides a scalable foundation for future extensions using longitudinal or multimodal data.
+This score reflects the model's true, uninflated discriminatory power when predicting dementia risk from purely foundational demographic, lifestyle, and health data.
